@@ -25,6 +25,12 @@ using namespace glm;
 #include "LoadBMP.hpp"
 #include "Plane.hpp"
 
+template <typename T>
+int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+
 class Camera {
 public:
     Camera(glm::vec3 position, glm::vec3 lookAt) {

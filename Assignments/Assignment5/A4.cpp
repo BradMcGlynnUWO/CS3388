@@ -898,6 +898,7 @@ int main() {
 
     
     std::vector<float> normals = compute_normals(vertices);
+    glm::vec3 lightpos(5.0f, 5.0f, 5.0f);
     /*writePLY(vertices, normalVertices, "F1.ply");
     
     vertices = marching_cubes(
@@ -947,6 +948,21 @@ int main() {
     
 
     GLuint VBO, VAO, NBO;
+
+    // Initialize LightDir vector
+    glm::vec3 lightDir = glm::normalize(glm::vec3(5.0f, 5.0f, 5.0f));
+
+    // Initialize modelColor vector
+    glm::vec3 modelColor = glm::vec3(0.0f, 1.0f, 1.0f); // blue green
+
+    // Get the locations of the uniforms
+    GLuint mvpLocation = glGetUniformLocation(shaderProgram, "MVP");
+    GLuint vLocation = glGetUniformLocation(shaderProgram, "V");
+    GLuint lightDirLocation = glGetUniformLocation(shaderProgram, "LightDir");
+    GLuint modelColorLocation = glGetUniformLocation(shaderProgram, "modelColor");
+
+
+
     
 
     // Loops until the user closes the window or presses the ESC key
@@ -979,18 +995,6 @@ int main() {
         // Calculates the model-view-projection matrix
         MVP = Projection * V * M;
 
-        drawBoundingBox(min, max);
-        drawAxes(glm::vec3(min, min, min), glm::vec3(max * 2, max * 2, max * 2));
-
-
-        // Compute the vertices for the isosurface
-        //std::vector<float> newVertices = marching_cubes(f1, isoval, min, max, stepsize);
-        //vertices.insert(vertices.end(), newVertices.begin(), newVertices.end());
-
-        // Compute the normals for the vertices
-        //std::vector<float> newNormals = compute_normals(vertices);
-        //normals.insert(normals.end(), newNormals.begin(), newNormals.end());
-
 
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
@@ -1010,10 +1014,36 @@ int main() {
         glEnableVertexAttribArray(1);
 
 
+        // use the shader program
         glUseProgram(shaderProgram);
+
+        // set up uniform variables
         GLuint MatrixID = glGetUniformLocation(shaderProgram, "MVP");
         glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
 
+        GLuint ViewID = glGetUniformLocation(shaderProgram, "V");
+        glUniformMatrix4fv(ViewID, 1, GL_FALSE, &V[0][0]);
+
+        GLuint LightID = glGetUniformLocation(shaderProgram, "LightDir");
+        glUniform3fv(LightID, 1, &lightDir[0]);
+
+        GLuint ModelColorID = glGetUniformLocation(shaderProgram, "modelColor");
+        glUniform3fv(ModelColorID, 1, &modelColor[0]);
+
+        GLuint ambientColorID = glGetUniformLocation(shaderProgram, "ambientColor");
+        glUniform3f(ambientColorID, 0.2f, 0.2f, 0.2f);
+
+        GLuint specularColorID = glGetUniformLocation(shaderProgram, "specularColor");
+        glUniform3f(specularColorID, 1.0f, 1.0f, 1.0f);
+
+        GLuint shininessID = glGetUniformLocation(shaderProgram, "shininess");
+        glUniform1f(shininessID, 64.0f);
+
+        // Set the value of enableLighting to true for rendering the object
+        glUniform1i(glGetUniformLocation(shaderProgram, "enableLighting"), 1);
+
+        // draw the triangles
+        glBindVertexArray(VAO);
         // draw triangles using VAO
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 3);
@@ -1022,6 +1052,12 @@ int main() {
         glDeleteVertexArrays(1, &VAO);
         glDeleteBuffers(1, &VBO);
         glDeleteBuffers(1, &NBO);
+
+        // Set the value of enableLighting to false for rendering the axes and cube
+        glUniform1i(glGetUniformLocation(shaderProgram, "enableLighting"), 0);
+
+        drawBoundingBox(min, max);
+        drawAxes(glm::vec3(min, min, min), glm::vec3(max * 2, max * 2, max * 2));
 
         // Restores the modelview and projection matrices to their previous states
         glPopMatrix();

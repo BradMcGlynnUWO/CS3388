@@ -1,24 +1,45 @@
+// Include standard headers
+#include <stdio.h>
+#include <stdlib.h>
+
 #include <GL/glew.h>
+
+// Include GLFW
 #include <GLFW/glfw3.h>
+GLFWwindow* window;
+
+
+// Include GLM
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 using namespace glm;
-#include <vector>
+
 #include <iostream>
 #include <fstream>
 #include <functional>
+#include <sstream>
+#include <vector>
+#include <map>
 #include "TriTable.hpp"
+//#include "shader.h"
+#include "shader.hpp"
+
+template <typename T>
+int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
 
 class Camera {
 public:
     Camera(glm::vec3 position, glm::vec3 lookAt) {
         position_ = position;
         lookAt_ = lookAt;
-        theta_ = glm::pi<float>();
-        phi_ = glm::pi<float>() / 2.0f;
         radius_ = glm::length(position_ - lookAt_);
+        theta_ = glm::acos(position.z / radius_);
+        phi_ = sgn(position.y) * glm::acos(position.x / sqrt(pow(position.x, 2) + pow(position.y, 2)));
+        
     }
 
     glm::vec3 getPosition() const {
@@ -51,7 +72,7 @@ public:
     void updateRadius(float deltaRadius) {
         radius_ += deltaRadius;
         if (radius_ < 0) {
-            radius_ = 1.0f;
+            radius_ = 0.1f;
         }
 
         glm::vec3 relativePos(
@@ -115,138 +136,242 @@ void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
     }
 }
 
+
+void drawBoundingBox(float min, float max) {
+
+    // Enable blending for transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Disable writing to depth buffer for drawing in the background
+    glDepthMask(GL_FALSE);
+
+    // Set line width and point size to be thin and small
+    glLineWidth(1.0f);
+    glPointSize(1.0f);
+
+    // Set color to white with transparency
+    glColor4f(1.0f, 1.0f, 1.0f, 0.5f);
+
+    // Draw line
+    glBegin(GL_LINES);
+
+    // bottom face
+    glVertex3f(min, min, min);
+    glVertex3f(max, min, min);
+    glVertex3f(max, min, min);
+    glVertex3f(max, max, min);
+    glVertex3f(max, max, min);
+    glVertex3f(min, max, min);
+    glVertex3f(min, max, min);
+    glVertex3f(min, min, min);
+
+    // top face
+    glVertex3f(min, min, max);
+    glVertex3f(max, min, max);
+    glVertex3f(max, min, max);
+    glVertex3f(max, max, max);
+    glVertex3f(max, max, max);
+    glVertex3f(min, max, max);
+    glVertex3f(min, max, max);
+    glVertex3f(min, min, max);
+
+    // sides
+    glVertex3f(min, min, min);
+    glVertex3f(min, min, max);
+    glVertex3f(max, min, min);
+    glVertex3f(max, min, max);
+    glVertex3f(max, max, min);
+    glVertex3f(max, max, max);
+    glVertex3f(min, max, min);
+    glVertex3f(min, max, max);
+    glEnd();
+
+    // Re-enable writing to depth buffer and disable blending
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
+void drawAxes(glm::vec3 origin, glm::vec3 extents)
+{
+
+
+    glm::vec3 xcol = glm::vec3(1.0f, 0.0f, 0.0f);
+	glm::vec3 ycol = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 zcol = glm::vec3(0.0f, 0.0f, 1.0f);
+
+    // Draw x-axis
+    glMatrixMode( GL_MODELVIEW );
+    glPushMatrix();
+
+
+    glLineWidth(4.0f);
+    glBegin(GL_LINES);
+    glColor3f(xcol.x, xcol.y, xcol.z);
+    glVertex3f(origin.x, origin.y, origin.z);
+    glVertex3f(origin.x + extents.x, origin.y, origin.z);
+
+    glVertex3f(origin.x + extents.x, origin.y, origin.z);
+    glVertex3f(origin.x + extents.x, origin.y, origin.z+0.1);
+    glVertex3f(origin.x + extents.x, origin.y, origin.z);
+    glVertex3f(origin.x + extents.x, origin.y, origin.z-0.1);
+    // draw y-axis
+    glColor3f(ycol.x, ycol.y, ycol.z);
+    glVertex3f(origin.x, origin.y, origin.z);
+    glVertex3f(origin.x, origin.y + extents.y, origin.z);
+
+    glVertex3f(origin.x, origin.y + extents.y, origin.z);
+    glVertex3f(origin.x, origin.y + extents.y, origin.z+0.1);
+    glVertex3f(origin.x, origin.y + extents.y, origin.z);
+    glVertex3f(origin.x, origin.y + extents.y, origin.z-0.1);
+    // draw z axis
+    glColor3f(zcol.x, zcol.y, zcol.z);
+    glVertex3f(origin.x, origin.y, origin.z);
+    glVertex3f(origin.x, origin.y, origin.z + extents.z);
+    
+    glVertex3f(origin.x, origin.y, origin.z + extents.z);
+    glVertex3f(origin.x+0.1, origin.y, origin.z + extents.z);
+
+    glVertex3f(origin.x, origin.y, origin.z + extents.z);
+    glVertex3f(origin.x-0.1, origin.y, origin.z + extents.z);
+    glEnd();
+
+
+    glPopMatrix();
+}
+
 void processInput (GLFWwindow* window) {
+    double currentXPos = lastXPos;
+    double currentYPos = lastYPos;
+
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
     glfwSetCursorPosCallback(window, cursorPositionCallback);
     glfwSetKeyCallback(window, keyboardCallback);
     
 }
 
-std::vector<float> compute_normals(const std::vector<float>& vertices) {
-    std::vector<float> normals(vertices.size(), 0.0f);
-    for (int i = 0; i < vertices.size(); i += 9) {
-        glm::vec3 v0(vertices[i], vertices[i + 1], vertices[i + 2]);
-        glm::vec3 v1(vertices[i + 3], vertices[i + 4], vertices[i + 5]);
-        glm::vec3 v2(vertices[i + 6], vertices[i + 7], vertices[i + 8]);
-        glm::vec3 e1 = v1 - v0;
-        glm::vec3 e2 = v2 - v0;
-        glm::vec3 normal = glm::normalize(glm::cross(e1, e2));
-        normals[i] = normal.x;
-        normals[i + 1] = normal.y;
-        normals[i + 2] = normal.z;
-        normals[i + 3] = normal.x;
-        normals[i + 4] = normal.y;
-        normals[i + 5] = normal.z;
-        normals[i + 6] = normal.x;
-        normals[i + 7] = normal.y;
-        normals[i + 8] = normal.z;
-    }
-    return normals;
+
+float f1(float x, float y, float z) {
+    return x*x + y*y + z*z;
 }
 
-void writePLY(const std::vector<float>& vertices, const std::vector<float>& normals, const std::string& fileName) {
-    std::ofstream file(fileName);
-    file << "ply\n";
-    file << "format ascii 1.0\n";
-    file << "element vertex " << vertices.size() / 3 << "\n";
-    file << "property float x\n";
-    file << "property float y\n";
-    file << "property float z\n";
-    file << "property float nx\n";
-    file << "property float ny\n";
-    file << "property float nz\n";
-    file << "element face " << vertices.size() / 9 << "\n";
-    file << "property list uchar int vertex_indices\n";
-    file << "end_header\n";
-    for (int i = 0; i < vertices.size(); i += 3) {
-        file << vertices[i] << " " << vertices[i + 1] << " " << vertices[i + 2] << " ";
-        file << normals[i] << " " << normals[i + 1] << " " << normals[i + 2] << "\n";
-    }
-    for (int i = 0; i < vertices.size(); i += 9) {
-        file << "3 " << i / 3 << " " << i / 3 + 1 << " " << i / 3 + 2 << "\n";
-    }
-    file.close();
+float f2(float x, float y, float z) {
+    return sin(x*y*z);
+}
+
+float f3(float x, float y, float z) {
+    return sin(x)*cos(y)*sin(z);
+}
+
+float f4(float x, float y, float z) {
+	return y - sin(x)*cos(z);
+}
+
+float f5(float x, float y, float z) {
+	return x*x - y*y - z*z - z;
 }
 
 
-struct Vertex {
-    float x, y, z;
-};
+void render (std::vector<float> vertices, std::vector<float> normalVertices, glm::mat4 MVP) {
 
-/*std::vector<float> marching_cubes(std::function<float(float, float, float)> f, float isovalue, float min, float max, float stepsize) {
-    std::vector<float> vertices;
+    // create shader for object
+    GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+    GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+    std::string VertexShaderCode = "\
+        #version 330 core\n\
+        layout (location = 0) in vec3 vertexPosition;\n\
+        layout (location = 1) in vec3 vertexNormal;\n\
+        out vec3 worldPosition;\n\
+        out vec3 worldNormal;\n\
+        out vec3 viewDirection;\n\
+        uniform mat4 modelMatrix;\n\
+        uniform mat4 viewMatrix;\n\
+        uniform mat4 projectionMatrix;\n\
+        void main()\n\
+        {\n\
+            worldPosition = vec3(modelMatrix * vec4(vertexPosition, 1.0));\n\
+            worldNormal = normalize(mat3(modelMatrix) * vertexNormal);\n\
+            vec3 viewPosition = vec3(inverse(viewMatrix) * vec4(0.0, 0.0, 0.0, 1.0));\n\
+            viewDirection = normalize(worldPosition - viewPosition);\n\
+            gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(vertexPosition, 1.0);\n\
+        }\n";
 
-    // Compute the number of cubes along each axis
-    int n_cubes = static_cast<int>((max - min) / stepsize) + 1;
+    std::string FragmentShaderCode = "\
+        #version 330 core\n\
+        in vec3 worldPosition;\n\
+        in vec3 worldNormal;\n\
+        in vec3 viewDirection;\n\
+        uniform vec3 lightDirection;\n\
+        uniform vec3 lightColor;\n\
+        uniform float shininess;\n\
+        uniform vec3 baseColor;\n\
+        out vec4 fragmentColor;\n\
+        void main()\n\
+        {\n\
+            vec3 lightDirectionWorld = normalize(lightDirection);\n\
+            float diffuse = max(dot(worldNormal, lightDirectionWorld), 0.0);\n\
+            vec3 reflection = reflect(-lightDirectionWorld, worldNormal);\n\
+            float specular = pow(max(dot(viewDirection, reflection), 0.0), shininess);\n\
+            vec3 ambientColor = vec3(0.1);\n\
+            vec3 diffuseColor = lightColor * baseColor * diffuse;\n\
+            vec3 specularColor = lightColor * specular;\n\
+            vec3 finalColor = ambientColor + diffuseColor + specularColor;\n\
+            fragmentColor = vec4(finalColor, 1.0);\n\
+        }\n";
 
-    // Loop over each cube in the grid
-    for (int i = 0; i < n_cubes; i++) {
-        for (int j = 0; j < n_cubes; j++) {
-            for (int k = 0; k < n_cubes; k++) {
-                // Compute the position of the current cube
-                float x = min + i * stepsize;
-                float y = min + j * stepsize;
-                float z = min + k * stepsize;
+    char const* VertexSourcePointer = VertexShaderCode.c_str();
+    glShaderSource(VertexShaderID, 1, &VertexSourcePointer, NULL);
+    glCompileShader(VertexShaderID);
 
-                // Evaluate the scalar field at the vertices of the cube
-                float values[8] = {
-                    f(x, y, z),
-                    f(x + stepsize, y, z),
-                    f(x + stepsize, y + stepsize, z),
-                    f(x, y + stepsize, z),
-                    f(x, y, z + stepsize),
-                    f(x + stepsize, y, z + stepsize),
-                    f(x + stepsize, y + stepsize, z + stepsize),
-                    f(x, y + stepsize, z + stepsize)
-                };
+    // Compile Fragment Shader
+    char const* FragmentSourcePointer = FragmentShaderCode.c_str();
+    glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer, NULL);
+    glCompileShader(FragmentShaderID);
+    
+    // store shaderID for later use
+    GLuint shaderID = glCreateProgram();
+    glAttachShader(shaderID, VertexShaderID);
+    glAttachShader(shaderID, FragmentShaderID);
+    glLinkProgram(shaderID);
 
-                // Compute the signs of the field values
-                int signs = 0;
-                for (int v = 0; v < 8; v++) {
-                    if (values[v] < isovalue) {
-                        signs |= 1 << v;
-                    }
-                }
+    glDetachShader(shaderID, VertexShaderID);
+    glDetachShader(shaderID, FragmentShaderID);
 
-                // Determine which edges are intersected by the isosurface
-                int edge_mask = edge_table[signs];
+    glDeleteShader(VertexShaderID);
+    glDeleteShader(FragmentShaderID);
 
-                // If the cube is entirely inside or outside the isosurface, skip it
-                if (edge_mask == 0 || edge_mask == 255) {
-                    continue;
-                }
+    GLuint VBO, VAO, NBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &NBO);
+    glBindVertexArray(VAO);
 
-                // Compute the positions of the vertices on the intersected edges
-                Vertex verts[12];
-                for (int e = 0; e < 12; e++) {
-                    if (edge_mask & (1 << e)) {
-                        int v1 = corner_index[e][0];
-                        int v2 = corner_index[e][1];
-                        float lerp = (isovalue - values[v1]) / (values[v2] - values[v1]);
-                        verts[e].x = x + vertex_offset[v1][0] + lerp * edge_direction[e][0];
-                        verts[e].y = y + vertex_offset[v1][1] + lerp * edge_direction[e][1];
-                        verts[e].z = z + vertex_offset[v1][2] + lerp * edge_direction[e][2];
-                    }
-                }
 
-                // Add the vertices to the output list
-                for (int t = 0; tri_table[signs][t] != -1; t += 3) {
-                    for (int v = 0; v < 3; v++) {
-                        int idx = tri_table[signs][t + v];
-                        float x = x0 + vertex_offset[idx][0] * stepsize;
-                        float y = y0 + vertex_offset[idx][1] * stepsize;
-                        float z = z0 + vertex_offset[idx][2] * stepsize;
-                        vertices.push_back(x);
-                        vertices.push_back(y);
-                        vertices.push_back(z);
-                        }
-                    }
-                }
-            }
-        }
-    return vertices;
-} */
 
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, NBO);
+    glBufferData(GL_ARRAY_BUFFER, normalVertices.size() * sizeof(float), normalVertices.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+
+    // Gets location of MVP and sets MVP uniform variable in shader program
+    //glUseProgram(shaderProgram);
+   // GLuint MatrixID = glGetUniformLocation(shaderID, "MVP");
+   // glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+//
+    // draw triangles using VAO
+    //glBindVertexArray(vao);
+    //glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 3);
+
+    // cleanup
+    //glDeleteVertexArrays(1, &vao);
+    //glDeleteBuffers(1, &vboVerts);
+    //glDeleteBuffers(1, &vboNormals);
+}
 
 std::vector<float> marching_cubes(
         std::function<float(float, float, float)> f,
@@ -332,290 +457,54 @@ std::vector<float> marching_cubes(
     return vertices;
 }
 
-void drawBoundingBox(float min, float max) {
-
-    // Enable blending for transparency
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // Disable writing to depth buffer for drawing in the background
-    glDepthMask(GL_FALSE);
-
-    // Set line width and point size to be thin and small
-    glLineWidth(1.0f);
-    glPointSize(1.0f);
-
-    // Set color to white with transparency
-    glColor4f(1.0f, 1.0f, 1.0f, 0.5f);
-
-    // Draw line
-    glBegin(GL_LINES);
-
-    // bottom face
-    glVertex3f(min, min, min);
-    glVertex3f(max, min, min);
-    glVertex3f(max, min, min);
-    glVertex3f(max, max, min);
-    glVertex3f(max, max, min);
-    glVertex3f(min, max, min);
-    glVertex3f(min, max, min);
-    glVertex3f(min, min, min);
-
-    // top face
-    glVertex3f(min, min, max);
-    glVertex3f(max, min, max);
-    glVertex3f(max, min, max);
-    glVertex3f(max, max, max);
-    glVertex3f(max, max, max);
-    glVertex3f(min, max, max);
-    glVertex3f(min, max, max);
-    glVertex3f(min, min, max);
-
-    // sides
-    glVertex3f(min, min, min);
-    glVertex3f(min, min, max);
-    glVertex3f(max, min, min);
-    glVertex3f(max, min, max);
-    glVertex3f(max, max, min);
-    glVertex3f(max, max, max);
-    glVertex3f(min, max, min);
-    glVertex3f(min, max, max);
-    glEnd();
-
-    // Re-enable writing to depth buffer and disable blending
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-}
-
-void drawCube(float min, float max) {
-    // Set the color to white
-    glColor3f(1.0f, 1.0f, 1.0f);
-
-    // Draw the edges of the cube
-    glBegin(GL_LINES);
-
-    // Bottom edges
-    glVertex3f(min, min, min);
-    glVertex3f(max, min, min);
-
-    glVertex3f(max, min, min);
-    glVertex3f(max, min, max);
-
-    glVertex3f(max, min, max);
-    glVertex3f(min, min, max);
-
-    glVertex3f(min, min, max);
-    glVertex3f(min, min, min);
-
-    // Top edges
-    glVertex3f(min, max, min);
-    glVertex3f(max, max, min);
-
-    glVertex3f(max, max, min);
-    glVertex3f(max, max, max);
-
-    glVertex3f(max, max, max);
-    glVertex3f(min, max, max);
-
-    glVertex3f(min, max, max);
-    glVertex3f(min, max, min);
-
-    // Vertical edges
-    glVertex3f(min, min, min);
-    glVertex3f(min, max, min);
-
-    glVertex3f(max, min, min);
-    glVertex3f(max, max, min);
-
-    glVertex3f(max, min, max);
-    glVertex3f(max, max, max);
-
-    glVertex3f(min, min, max);
-    glVertex3f(min, max, max);
-
-    glEnd();
-}
-
-void drawAxes(glm::vec3 origin, glm::vec3 extents)
-{
-
-
-    glm::vec3 xcol = glm::vec3(1.0f, 0.0f, 0.0f);
-	glm::vec3 ycol = glm::vec3(0.0f, 1.0f, 0.0f);
-	glm::vec3 zcol = glm::vec3(0.0f, 0.0f, 1.0f);
-
-    // Draw x-axis
-    glMatrixMode( GL_MODELVIEW );
-    glPushMatrix();
-
-
-    glLineWidth(3.0f);
-    glBegin(GL_LINES);
-    glColor3f(xcol.x, xcol.y, xcol.z);
-    glVertex3f(origin.x, origin.y, origin.z);
-    glVertex3f(origin.x + extents.x, origin.y, origin.z);
-
-    glVertex3f(origin.x + extents.x, origin.y, origin.z);
-    glVertex3f(origin.x + extents.x, origin.y, origin.z+0.1);
-    glVertex3f(origin.x + extents.x, origin.y, origin.z);
-    glVertex3f(origin.x + extents.x, origin.y, origin.z-0.1);
-    // draw y-axis
-    glColor3f(ycol.x, ycol.y, ycol.z);
-    glVertex3f(origin.x, origin.y, origin.z);
-    glVertex3f(origin.x, origin.y + extents.y, origin.z);
-
-    glVertex3f(origin.x, origin.y + extents.y, origin.z);
-    glVertex3f(origin.x, origin.y + extents.y, origin.z+0.1);
-    glVertex3f(origin.x, origin.y + extents.y, origin.z);
-    glVertex3f(origin.x, origin.y + extents.y, origin.z-0.1);
-    // draw z axis
-    glColor3f(zcol.x, zcol.y, zcol.z);
-    glVertex3f(origin.x, origin.y, origin.z);
-    glVertex3f(origin.x, origin.y, origin.z + extents.z);
-    
-    glVertex3f(origin.x, origin.y, origin.z + extents.z);
-    glVertex3f(origin.x+0.1, origin.y, origin.z + extents.z);
-
-    glVertex3f(origin.x, origin.y, origin.z + extents.z);
-    glVertex3f(origin.x-0.1, origin.y, origin.z + extents.z);
-    glEnd();
-
-
-    glPopMatrix();
-}
-
-
-
-float f1(float x, float y, float z) {
-    return x*x + y*y + z*z;
-}
-
-float f2(float x, float y, float z) {
-    return sin(x*y*z);
-}
-
-float f3(float x, float y, float z) {
-    return sin(x)*cos(y)*sin(z);
-}
-
-
-void render (std::vector<float> vertices, std::vector<float> normalVertices, glm::mat4 MVP) {
-
-    // create shader for object
-    GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-    GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
-    std::string VertexShaderCode = "\
-        #version 330 core\n\
-        layout (location = 0) in vec3 vertexPosition;\n\
-        layout (location = 1) in vec3 vertexNormal;\n\
-        out vec3 worldPosition;\n\
-        out vec3 worldNormal;\n\
-        out vec3 viewDirection;\n\
-        uniform mat4 modelMatrix;\n\
-        uniform mat4 viewMatrix;\n\
-        uniform mat4 projectionMatrix;\n\
-        void main()\n\
-        {\n\
-            worldPosition = vec3(modelMatrix * vec4(vertexPosition, 1.0));\n\
-            worldNormal = normalize(mat3(modelMatrix) * vertexNormal);\n\
-            vec3 viewPosition = vec3(inverse(viewMatrix) * vec4(0.0, 0.0, 0.0, 1.0));\n\
-            viewDirection = normalize(worldPosition - viewPosition);\n\
-            gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(vertexPosition, 1.0);\n\
-        }\n";
-
-    std::string FragmentShaderCode = "\
-        #version 330 core\n\
-        in vec3 worldPosition;\n\
-        in vec3 worldNormal;\n\
-        in vec3 viewDirection;\n\
-        uniform vec3 lightDirection;\n\
-        uniform vec3 lightColor;\n\
-        uniform float shininess;\n\
-        uniform vec3 baseColor;\n\
-        out vec4 fragmentColor;\n\
-        void main()\n\
-        {\n\
-            vec3 lightDirectionWorld = normalize(lightDirection);\n\
-            float diffuse = max(dot(worldNormal, lightDirectionWorld), 0.0);\n\
-            vec3 reflection = reflect(-lightDirectionWorld, worldNormal);\n\
-            float specular = pow(max(dot(viewDirection, reflection), 0.0), shininess);\n\
-            vec3 ambientColor = vec3(0.1);\n\
-            vec3 diffuseColor = lightColor * baseColor * diffuse;\n\
-            vec3 specularColor = lightColor * specular;\n\
-            vec3 finalColor = ambientColor + diffuseColor + specularColor;\n\
-            fragmentColor = vec4(finalColor, 1.0);\n\
-        }\n";
-
-    char const* VertexSourcePointer = VertexShaderCode.c_str();
-    glShaderSource(VertexShaderID, 1, &VertexSourcePointer, NULL);
-    glCompileShader(VertexShaderID);
-
-    // Compile Fragment Shader
-    char const* FragmentSourcePointer = FragmentShaderCode.c_str();
-    glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer, NULL);
-    glCompileShader(FragmentShaderID);
-    
-    // store shaderID for later use
-    GLuint shaderID = glCreateProgram();
-    glAttachShader(shaderID, VertexShaderID);
-    glAttachShader(shaderID, FragmentShaderID);
-    glLinkProgram(shaderID);
-
-    glDetachShader(shaderID, VertexShaderID);
-    glDetachShader(shaderID, FragmentShaderID);
-
-    glDeleteShader(VertexShaderID);
-    glDeleteShader(FragmentShaderID);
-
-    // generate VAO and VBOs
-    GLuint vao, vboVerts, vboNormals, eboIndices;
-    std::vector<int> indices;
-    for (int i = 0; i < vertices.size(); ++i) {
-        indices.push_back(i);
+std::vector<float> compute_normals(const std::vector<float>& vertices) {
+    std::vector<float> normals(vertices.size(), 0.0f);
+    for (int i = 0; i < vertices.size(); i += 9) {
+        glm::vec3 v0(vertices[i], vertices[i + 1], vertices[i + 2]);
+        glm::vec3 v1(vertices[i + 3], vertices[i + 4], vertices[i + 5]);
+        glm::vec3 v2(vertices[i + 6], vertices[i + 7], vertices[i + 8]);
+        glm::vec3 e1 = v1 - v0;
+        glm::vec3 e2 = v2 - v0;
+        glm::vec3 normal = glm::normalize(glm::cross(e1, e2));
+        normals[i] = normal.x;
+        normals[i + 1] = normal.y;
+        normals[i + 2] = normal.z;
+        normals[i + 3] = normal.x;
+        normals[i + 4] = normal.y;
+        normals[i + 5] = normal.z;
+        normals[i + 6] = normal.x;
+        normals[i + 7] = normal.y;
+        normals[i + 8] = normal.z;
     }
-
-
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    // generate VBO for vertex positions
-    glGenBuffers(1, &vboVerts);
-    glBindBuffer(GL_ARRAY_BUFFER, vboVerts);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // generate VBO for vertex normals
-    glGenBuffers(1, &vboNormals);
-    glBindBuffer(GL_ARRAY_BUFFER, vboNormals);
-    glBufferData(GL_ARRAY_BUFFER, normalVertices.size() * sizeof(GLfloat), normalVertices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-    glEnableVertexAttribArray(1);
-
-    // creates element buffer for indices of faces vertex
-    glGenBuffers(1, &eboIndices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboIndices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 3 * indices.size(), indices.data(), GL_STATIC_DRAW);   
-    glBindVertexArray(0);
-
-    // Gets location of MVP and sets MVP uniform variable in shader program
-    glUseProgram(shaderID);
-    GLuint MatrixID = glGetUniformLocation(shaderID, "MVP");
-    glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
-
-    // draw triangles using VAO
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 3);
-
-    // cleanup
-    glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &vboVerts);
-    glDeleteBuffers(1, &vboNormals);
+    return normals;
 }
 
-int main (int argc, char* argv[]){
+void writePLY(const std::vector<float>& vertices, const std::vector<float>& normals, const std::string& fileName) {
+    std::ofstream file(fileName);
+    file << "ply\n";
+    file << "format ascii 1.0\n";
+    file << "element vertex " << vertices.size() / 3 << "\n";
+    file << "property float x\n";
+    file << "property float y\n";
+    file << "property float z\n";
+    file << "property float nx\n";
+    file << "property float ny\n";
+    file << "property float nz\n";
+    file << "element face " << vertices.size() / 9 << "\n";
+    file << "property list uchar int vertex_indices\n";
+    file << "end_header\n";
+    for (int i = 0; i < vertices.size(); i += 3) {
+        file << vertices[i] << " " << vertices[i + 1] << " " << vertices[i + 2] << " ";
+        file << normals[i] << " " << normals[i + 1] << " " << normals[i + 2] << "\n";
+    }
+    for (int i = 0; i < vertices.size(); i += 9) {
+        file << "3 " << i / 3 << " " << i / 3 + 1 << " " << i / 3 + 2 << "\n";
+    }
+    file.close();
+}
 
-    // Initializes GLFW
+int main() {
+	// Initializes GLFW
 	if( !glfwInit() )
 	{
 		fprintf( stderr, "Failed to initialize GLFW\n" );
@@ -632,30 +521,11 @@ int main (int argc, char* argv[]){
 	float max = 5;
 	float isoval = 1;
 
-	if (argc > 1 ) {
-		screenW = atoi(argv[1]);
-	}
-	if (argc > 2) {
-		screenH = atoi(argv[2]);
-	}
-	if (argc > 3) {
-		stepsize = atof(argv[3]);
-	}
-	if (argc > 4) {
-		min = atof(argv[4]);
-	}
-	if (argc > 5) {
-		max = atof(argv[5]);
-	}
-	if (argc > 6) {
-		isoval = atof(argv[6]);
-	}
-
     // to help minimize screen tearing
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwSwapInterval(1);
 
-	GLFWwindow* window = glfwCreateWindow( screenW, screenH, "Assignment 5", NULL, NULL);
+	window = glfwCreateWindow( screenW, screenH, "Phong Shader", NULL, NULL);
 	if( window == NULL ){
 		fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 		getchar();
@@ -685,53 +555,29 @@ int main (int argc, char* argv[]){
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
-    
-    
-
-    // initializes model-view-projection matrix
-    glm::mat4 MVP;
-
-
     std::vector<float> vertices = marching_cubes(
-        f1,
-        isoval,
+        f5,
+        -1.5,
         min,
         max,
         stepsize);
 
     
-    std::vector<float> normalVertices = compute_normals(vertices);
+    std::vector<float> normals = compute_normals(vertices);
+    glm::vec3 lightpos(5.0f, 5.0f, 5.0f);
 
-    #include <fstream>
+    // initializes model-view-projection matrix
+    glm::mat4 MVP;
+    GLuint shaderProgram =  LoadShaders("PhongShader.vert", "PhongShader.frag");
+    
 
+    GLuint VBO, VAO, NBO;
 
-    // Open the file
-    std::ofstream outputFile("vertices.txt");
-    outputFile << vertices.size() << "\n";
-    // Print the vertices to the console and to the file
-    for (const auto& vertex : vertices) {
-        outputFile << vertex << " ";
-        outputFile << "\n";
-    }
-    outputFile << std::endl;
-    // Close the file
-    outputFile.close();
+    // Initialize LightDir vector
+    glm::vec3 lightDir = glm::normalize(glm::vec3(5.0f, 5.0f, 5.0f));
 
-    // Open the file
-    std::ofstream outputFile1("normalVertices.txt");
-    outputFile1 << normalVertices.size() << "\n";
-    // Print the normal vertices to the console and to the file
-    for (const auto& vertex : normalVertices) {
-        outputFile1 << vertex << " ";
-        outputFile1 << "\n";
-    }
-    outputFile1 << std::endl;
-
-    // Close the file
-    outputFile1.close();
-
-
-    writePLY(vertices, normalVertices, "F1.ply");
+    // Initialize modelColor vector
+    glm::vec3 modelColor = glm::vec3(0.0f, 1.0f, 1.0f); // blue green
 
     // Loops until the user closes the window or presses the ESC key
 	do{
@@ -763,19 +609,82 @@ int main (int argc, char* argv[]){
         // Calculates the model-view-projection matrix
         MVP = Projection * V * M;
 
+
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glGenBuffers(1, &NBO);
+        glBindVertexArray(VAO);
+
+
+
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, NBO);
+        glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+
+
+        // use the shader program
+        glUseProgram(shaderProgram);
+
+        // set up uniform variables
+        GLuint MatrixID = glGetUniformLocation(shaderProgram, "MVP");
+        glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+
+        GLuint ViewID = glGetUniformLocation(shaderProgram, "V");
+        glUniformMatrix4fv(ViewID, 1, GL_FALSE, &V[0][0]);
+
+        GLuint LightID = glGetUniformLocation(shaderProgram, "LightDir");
+        glUniform3fv(LightID, 1, &lightDir[0]);
+
+        GLuint ModelColorID = glGetUniformLocation(shaderProgram, "modelColor");
+        glUniform3fv(ModelColorID, 1, &modelColor[0]);
+
+        GLuint ambientColorID = glGetUniformLocation(shaderProgram, "ambientColor");
+        glUniform3f(ambientColorID, 0.2f, 0.2f, 0.2f);
+
+        GLuint specularColorID = glGetUniformLocation(shaderProgram, "specularColor");
+        glUniform3f(specularColorID, 1.0f, 1.0f, 1.0f);
+
+        GLuint shininessID = glGetUniformLocation(shaderProgram, "shininess");
+        glUniform1f(shininessID, 64.0f);
+
+        // Set the value of enableLighting to true for rendering the object
+        glUniform1i(glGetUniformLocation(shaderProgram, "enableLighting"), 1);
+
+        // draw the triangles
+        glBindVertexArray(VAO);
+        // draw triangles using VAO
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 3);
+
+        // cleanup
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        glDeleteBuffers(1, &NBO);
+
+        // Set the value of enableLighting to false for rendering the axes and cube
+        glUniform1i(glGetUniformLocation(shaderProgram, "enableLighting"), 0);
+        glUseProgram(0);
+
         drawBoundingBox(min, max);
-        drawAxes(glm::vec3(min, min, min), glm::vec3(max * 2, max * 2, max * 2));
-        //render(vertices, normalVertices, MVP);
+        drawAxes(glm::vec3(min, min, min), glm::vec3(max - min, max - min, max - min));
 
         // Restores the modelview and projection matrices to their previous states
-        //glPopMatrix();
-        //glMatrixMode(GL_PROJECTION);
-        //glPopMatrix();
-        //glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
 
-        // Swaps the front and back buffers to display the rendered image
-        glfwSwapBuffers(window);
+        // Poll for and process events
         glfwPollEvents();
+
+        // Swap the front and back buffers
+        glfwSwapBuffers(window);
 
 
 	} // Checks if the ESC key was pressed or the window was closed
