@@ -1,0 +1,84 @@
+#version 400
+
+layout (triangles) in;
+layout (triangle_strip, max_vertices=3) out;
+
+// Input vertex data, aggregated into triangles
+//in vec3 color_tes[];
+//in worldpos
+in vec2 uv_tes[];
+in vec3 position_tes[];
+in vec3 normal_tes[];
+in vec3 eye_tes[];
+in vec3 light_tes[];
+
+// Output data per vertex, passed to primitive assembly and rasterization
+//flat out vec3 color_gs;
+//out vec3 triDistance;
+out vec2 uv_geo;
+out vec3 Position_worldspace_geo;
+out vec3 Normal_cameraspace_geo;
+out vec3 EyeDirection_cameraspace_geo;
+out vec3 LightDirection_cameraspace_geo;
+
+
+// Uniform values that stay constant for the whole mesh.
+
+
+uniform mat4 MVP;
+uniform float time;
+uniform sampler2D disptex;
+
+vec3 GetNormal(vec4 a, vec4 b, vec4 c)
+{
+   vec3 x = b.xyz - a.xyz;
+   vec3 y = c.xyz - b.xyz;
+   return normalize(cross(x, y));
+}
+
+
+vec3 Gerstner(vec3 worldpos, float w, float A, float phi, float Q, vec2 D, int N) {
+    vec2 xz = worldpos.xz;
+    float dx = dot(D, vec2(w*D.x, w*D.y));
+    float dy = sqrt(1.0 - dx*dx);
+    float QwAN = Q*w*A*N;
+    float cosTerm = cos(dot(D, xz) * w + phi + time * w);
+    float sinTerm = sin(dot(D, xz) * w + phi + time * w);
+    return vec3(QwAN * D.x * cosTerm, A * dy * sinTerm, QwAN * D.y * cosTerm);
+}
+
+
+
+void main() {
+    vec4 position_tes[3];
+    for (int i = 0; i < 3; ++i) {
+        position_tes[i] = gl_in[i].gl_Position;
+    }
+
+    for (int i = 0; i < gl_in.length(); ++i) {
+        vec4 pos = vec4(position_tes[i].xyz, 1.0);
+        
+        // Displace vertices using the displacement map
+        vec2 uv = (pos.xy / pos.w) * 0.5 + 0.5;
+        float displacement = texture(disptex, uv).r;
+        pos.y += displacement;
+
+        // Calculate wave perturbations
+        vec3 wave1 = Gerstner(pos.xyz, 4.0, 0.08, 1.1, 0.75, vec2(0.3, 0.6), 4);
+        vec3 wave2 = Gerstner(pos.xyz, 2.0, 0.05, 1.1, 0.75, vec2(0.2, 0.866), 4);
+        pos.xyz += wave1 + wave2;
+
+        // Calculate final position and output vertex
+        gl_Position = MVP * pos;
+        
+		uv_geo = uv_tes[i];
+		Position_worldspace_geo = position_tes[i].xyz;
+		Normal_cameraspace_geo = normal_tes[i];
+		EyeDirection_cameraspace_geo = eye_tes[i];
+		LightDirection_cameraspace_geo = light_tes[i];
+		
+		EmitVertex();
+    }
+    EndPrimitive();
+}
+
