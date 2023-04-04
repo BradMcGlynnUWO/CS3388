@@ -336,6 +336,12 @@ class TexturedMesh {
 private:
     std::vector <VertexData> vertices;
     std::vector <TriData> faces;
+    std::vector<GLfloat> vertexTextureCoordinates;
+    std::vector<GLfloat> vertexPositions;
+    std::vector<GLfloat> normalPositions;
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
+    //glm::vec3 rotation;
+
     GLuint vao; 
     GLuint vboVertexPosition; 
     GLuint vboTextureCoordinates; 
@@ -343,15 +349,14 @@ private:
     GLuint eboFacesIndices; 
     GLuint textureID; 
     GLuint shaderID; 
+    GLuint framebuffer;
+    glm::vec3 position;
     
 public:
     TexturedMesh(const char* plyFilePath, const char* bmpFilePath, GLuint shaderID) {
         // read PLY files and store date in appropriate vectors
         this->shaderID = shaderID;
         readPLYFile(plyFilePath, vertices, faces);
-        std::vector<GLfloat> vertexTextureCoordinates;
-        std::vector<GLfloat> vertexPositions;
-        std::vector<GLfloat> normalPositions;
         // Initialize vertexPositions vector with appropriate space, then fill with appropriate data
         vertexPositions.reserve(vertices.size() * 3);
         for (const auto& vertex : vertices) {
@@ -391,8 +396,8 @@ public:
         glBindTexture(GL_TEXTURE_2D, 0);
 
         glUseProgram(shaderID);
-        glUniform1i(glGetUniformLocation(shaderID, "tex"), 0); // bind the texture to texture unit 0
-		glActiveTexture(GL_TEXTURE0); // activate texture unit 0
+        glUniform1i(glGetUniformLocation(shaderID, "tex"), 3); // bind the texture to texture unit 0
+		glActiveTexture(GL_TEXTURE3); // activate texture unit 0
 		glBindTexture(GL_TEXTURE_2D, textureID); // bind the texture object to the currently active texture unit
         glUseProgram(0);
         
@@ -437,20 +442,145 @@ public:
         
     }
 
-    void draw(glm::mat4 MVP) {
+    void updateVerticesandNormals(glm::vec3 displacedPosition, glm::vec3 displacedNormals) {
+        for (int i = 0; i < vertexPositions.size() - 2; i++) {
+            vertexPositions[i] = vertexPositions[i] + displacedPosition.x;
+            vertexPositions[i + 1] = vertexPositions[i + 1] + displacedPosition.y;
+            vertexPositions[i + 2] = vertexPositions[i + 2] + displacedPosition.z;
+
+        }
+
+        for (int i = 0; i < normalPositions.size() - 2; i++) {
+            normalPositions[i] = normalPositions[i] + displacedNormals.x;
+            normalPositions[i + 1] = normalPositions[i + 1] + displacedNormals.y;
+            normalPositions[i + 2] = normalPositions[i + 2] + displacedNormals.z;
+
+        }
+
+
+        // sets up vertex attribute object
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
+        // creates attribute buffer for vertex positions
+        glGenBuffers(1, &vboVertexPosition);
+        glBindBuffer(GL_ARRAY_BUFFER, vboVertexPosition);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertexPositions.size(), vertexPositions.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        // creates attribute buffer for texture coordinates       
+        glGenBuffers(1, &vboNormalPosition);
+        glBindBuffer(GL_ARRAY_BUFFER, vboNormalPosition);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * normalPositions.size(), normalPositions.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, (void*)0);
+
+        // creates attribute buffer for texture coordinates       
+        glGenBuffers(1, &vboTextureCoordinates);
+        glBindBuffer(GL_ARRAY_BUFFER, vboTextureCoordinates);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertexTextureCoordinates.size(), vertexTextureCoordinates.data(), GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(2);
+		glVertexAttribPointer(
+			2,                                // attribute. No particular reason for 1, but must match the layout in the shader.
+			2,                                // size
+			GL_FLOAT,                         // type
+			GL_FALSE,                         // normalized?
+			0,                                // stride
+			(void*)0                         // array buffer offset
+		);
+        
+        // creates element buffer for indices of faces vertex
+        glGenBuffers(1, &eboFacesIndices);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboFacesIndices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 3 * faces.size(), faces.data(), GL_STATIC_DRAW);   
+        glBindVertexArray(0);
+    }
+
+    glm::vec3 getPosition() const {
+        return glm::vec3(modelMatrix[3]);
+    }
+
+    void setPosition(const glm::vec3& position) {
+        modelMatrix[3] = glm::vec4(position, 1.0f);
+    }
+
+    void move(GLFWwindow* window) {
+        float speed = 0.5f; // Adjust the speed as needed
+        glm::vec3 movement = glm::vec3(0.0f);
+
+        
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[2]);
+            movement -= speed * position; // move object forwards
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[2]);
+            movement += speed * position; // move object backwards
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[0]);
+            movement -= speed * position; // move object to left
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[0]);
+            movement += speed * position; // move object to right
+        }
+        if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[1]);
+            movement += speed * position; // move object up
+        }
+        if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+            glm::vec3 position = glm::vec3(modelMatrix[1]);
+            movement -= speed * position; // move object down
+        }
+            
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(speed * 15), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate object to left
+        }
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(-speed * 15), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate object to right
+
+
+        glm::vec3 currentPosition = getPosition();
+        currentPosition += movement;
+        setPosition(currentPosition);
+    }
+
+    void setRotation(const glm::vec3 &normal) {
+        //this->rotation = normal;
+    }
+
+    void draw(glm::mat4 P, glm::mat4 V) {
 
         // Enables blending
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        
+
+        // Apply rotation based on the normal vector
+        //float angle = acos(glm::dot(glm::vec3(0, 1, 0), rotation));
+        //glm::vec3 axis = glm::normalize(glm::cross(glm::vec3(0, 1, 0), rotation));
+        //modelMatrix = glm::rotate(modelMatrix, angle, axis);
         
         // Gets location of MVP and sets MVP uniform variable in shader program
         glUseProgram(shaderID);
-        GLuint MatrixID = glGetUniformLocation(shaderID, "MVP");
-        glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+        GLuint ProjectionID = glGetUniformLocation(shaderID, "P");
+        glUniformMatrix4fv(ProjectionID, 1, GL_FALSE, &P[0][0]);
+        GLuint ViewID = glGetUniformLocation(shaderID, "V");
+        glUniformMatrix4fv(ViewID, 1, GL_FALSE, &V[0][0]);
+        GLuint ModelID = glGetUniformLocation(shaderID, "M");
+        glUniformMatrix4fv(ModelID, 1, GL_FALSE, &modelMatrix[0][0]);
 
         // Enables 2D texturing and binds the texture
         glEnable(GL_TEXTURE_2D);
+        glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, textureID);
+
+        // Bind the framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
         // Binds the vao
         glBindVertexArray(vao);
@@ -460,6 +590,9 @@ public:
 
         // Unbinds the vao
         glBindVertexArray(0);
+
+        // Unbind the framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         
         // Clears out attributes and disables blending
         glUseProgram(0);
@@ -473,6 +606,23 @@ public:
 
 const unsigned int SCR_WIDTH = 1400;
 const unsigned int SCR_HEIGHT = 900;
+
+
+float getDisplacementFromTexture(float x, float z, int textureWidth, int textureHeight, GLuint displacementTexture) {
+    int texX = static_cast<int>((x + 0.5f) * textureWidth);
+    int texY = static_cast<int>((z + 0.5f) * textureHeight);
+    texX = std::max(0, std::min(texX, textureWidth - 1));
+    texY = std::max(0, std::min(texY, textureHeight - 1));
+    
+    float displacement;
+    glBindTexture(GL_TEXTURE_2D, displacementTexture);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, &displacement);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    return displacement;
+}
+
+
 
 int main()
 {
@@ -514,12 +664,12 @@ int main()
     GLuint shaderProgram = LoadShaders("Shaders/vertex_shader.glsl", "Shaders/geometry_shader.glsl", "Shaders/fragment_shader.glsl");
 
     // Set up plane mesh object
-    float min = -3.0f;
-    float max = 3.0f;
-    float stepsize = 0.5f;
+    float min = -10.0f;
+    float max = 10.0f;
+    float stepsize = 2.0f;
 
     glm::vec4 modelColor = glm::vec4(0.0, 0.0f, 1.0f, 1.0f);
-    glm::vec3 lightPos = (glm::vec3(5.0f, 15.0f, 5.0f));
+    glm::vec3 lightPos = (glm::vec3(5.0f, 5.0f, 5.0f));
     PlaneMesh planeMesh(min, max, stepsize, shaderProgram);
 
 
@@ -549,6 +699,8 @@ int main()
     
     // use the shader program
     glUseProgram(plyShader);
+
+    
 
     // set up uniform variables
     GLuint plyMatrixID = glGetUniformLocation(plyShader, "MVP");
@@ -583,6 +735,7 @@ int main()
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
+
     // Main loop
     do {
 
@@ -593,11 +746,16 @@ int main()
         double currentTime = glfwGetTime();
 		static double lastTime = glfwGetTime();
 		float deltaTime = ( currentTime - lastTime );
+
+        boat.move(window);
+        eyes.move(window);
+        head.move(window);
         
 
         // Sets the camera view matrix
         glm::mat4 V = camera.getViewMatrix();
 
+        
         // Sets the projection matrix
         glm::mat4 Projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
 
@@ -618,18 +776,16 @@ int main()
         glm::mat4 MVP = Projection * V * M;
 
         
-
-        // Render
-        glUseProgram(shaderProgram);
+        // Render the planeMesh
         planeMesh.draw(V, Projection, M, lightPos, deltaTime);
-        glUseProgram(0);
 
-        glUseProgram(plyShader);
+        
 
+        
 
-        boat.draw(MVP);
-		head.draw(MVP);
-		eyes.draw(MVP);
+        boat.draw(Projection, V);
+		head.draw(Projection, V);
+		eyes.draw(Projection, V);
 
         glUseProgram(0);
 
@@ -646,10 +802,6 @@ int main()
     glDeleteBuffers(1, &planeMesh.VBO);
     glDeleteBuffers(1, &planeMesh.EBO);
 
-    //glDeleteTextures(1, &heightTexture);
-    //glDeleteTextures(1, &normalTexture);
-    //glDeleteFramebuffers(1, &heightFramebuffer);
-    //glDeleteFramebuffers(1, &normalFramebuffer);
     // Clean up and exit
     glfwTerminate();
     return 0;

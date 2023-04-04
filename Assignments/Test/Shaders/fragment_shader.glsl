@@ -21,13 +21,15 @@ void phongColor() {
     vec4 MaterialAmbientColor = vec4(0.2, 0.2, 0.2, MaterialDiffuseColor.a) * MaterialDiffuseColor;
     vec4 MaterialSpecularColor = vec4(0.7, 0.7, 0.7, MaterialDiffuseColor.a);
 
-    vec3 n = normalize( fragNormal );
-    vec3 l = normalize( fragLightDirection );
-    float cosTheta = clamp( dot( n,l ), 0,1 ); //ensure dot product is between 0 and 1
+    vec3 N = normalize(fragNormal);
+    vec3 L = normalize(fragLightDirection);
+    vec3 V = normalize(fragEyeDirection);
 
-    vec3 E = normalize(fragEyeDirection);
-    vec3 R = reflect(-l,n);
-    float cosAlpha = clamp( dot( E,R ), 0,1 );
+
+    float cosTheta = clamp(dot(N, L), 0, 1);
+    vec3 R = reflect(-L, N);
+    float cosAlpha = clamp(dot(V, R), 0, 1);
+
 
     color_out =
         // Ambient: simulates indirect lighting
@@ -41,3 +43,6 @@ void phongColor() {
 void main() {
     phongColor();
 }
+
+
+

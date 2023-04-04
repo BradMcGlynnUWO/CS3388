@@ -15,6 +15,7 @@ out vec2 uv;
 uniform mat4 MVP;
 uniform mat4 V;
 uniform mat4 M;
+uniform mat4 P;
 uniform vec3 lightPos;
 //uniform sampler2D heightTexture;
 //uniform sampler2D normalTexture;
@@ -31,7 +32,7 @@ void main() {
     //vec3 adjustedVertexPosition = vertexPosition_modelspace + vec3(0.0, height, 0.0);
     //vec3 adjustedNormal = normalize(vertexNormal_modelspace + normal);
 
-    gl_Position =  MVP * vec4(vertexPosition_modelspace, 1);
+    gl_Position =  P * V * M * vec4(vertexPosition_modelspace, 1);
 
     vec3 vertexPosition_cameraspace = (V * M * vec4(vertexPosition_modelspace, 1)).xyz;
     EyeDirection_cameraspace = vec3(0, 0, 0) - vertexPosition_cameraspace;

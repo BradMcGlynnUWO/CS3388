@@ -17,6 +17,7 @@ out vec3 fragLightDirection;
 out vec3 fragEyeDirection;
 out vec2 fragUV;
 
+
 // Uniform values that stay constant for the whole mesh.
 uniform mat4 projection;
 uniform mat4 view;
@@ -24,21 +25,24 @@ uniform mat4 model;
 uniform float time;
 uniform sampler2D disptex;
 
+
 vec3 Gerstner(vec3 worldPos, float w, float A, float phi, float Q, vec2 D, int N) {
     float wx = w * D.x;
     float wz = w * D.y;
-    float cosTerm = cos(w * dot(D, worldPos.xz) + phi * time);
-    float sinTerm = sin(w * dot(D, worldPos.xz) + phi * time);
-    float Qi = Q / (w * A * N);
+    vec2 xzPos = worldPos.xz;
+    float cosTerm = cos(w * dot(D, xzPos) + phi * time);
+    float sinTerm = sin(w * dot(D, xzPos) + phi * time);
+    float Qi = Q / (w * A * float(N));
 
     return vec3(Qi * A * D.x * cosTerm, A * sinTerm, Qi * A * D.y * cosTerm);
 }
+
 
 void main() {
     vec3 pos[3];
 
     for(int i = 0; i < gl_in.length(); ++i) {
-        float displacement = texture(disptex, uv_tes[i]).r;
+        float displacement = clamp(texture(disptex, uv_tes[i]).r, -0.025, 0.025);
         pos[i] = position_tes[i];
         pos[i].y += displacement;
 
@@ -53,9 +57,9 @@ void main() {
 
     for(int i = 0; i < gl_in.length(); ++i) {
         fragPosition = vec3(projection * view * model * vec4(pos[i], 1));
-        fragNormal = vec3(projection * view * model * vec4(mynorm, 1));
-        fragLightDirection = vec3(projection * view * model * vec4(lightDirection_tes[i], 1));
-        fragEyeDirection = vec3(projection * view * model * vec4(eyeDirection_tes[i], 1));
+        fragNormal = mynorm;
+        fragLightDirection = lightDirection_tes[i];
+        fragEyeDirection = eyeDirection_tes[i];
 
         fragUV = uv_tes[i];
 

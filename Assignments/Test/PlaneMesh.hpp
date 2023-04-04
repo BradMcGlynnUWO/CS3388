@@ -39,7 +39,14 @@ private:
 
 
         glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(this->shaderProgram);
 
+        waterTextureLoc = glGetUniformLocation(this->shaderProgram, "waterTexture");
+        glUniform1i(waterTextureLoc, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, waterTexture);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
         free(data);
 
         loadBMP("Assets/displacement-map1.bmp", &data, &width, &height);
@@ -59,7 +66,15 @@ private:
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(this->shaderProgram);
 
+        displacementTextureLoc = glGetUniformLocation(this->shaderProgram, "disptex");
+        glActiveTexture(GL_TEXTURE1);
+        glUniform1i(displacementTextureLoc, 1);
+        
+        glBindTexture(GL_TEXTURE_2D, displacementTexture);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
         free(data);
 
     }
@@ -107,6 +122,7 @@ public:
         planeMeshQuads(min, max, stepsize);
         setupBuffers();
         setupUniforms();
+        setupTextures();
     }
 
     void planeMeshQuads(float min, float max, float stepsize) {
@@ -152,6 +168,14 @@ public:
 			}
 			++i;
 		}
+
+        GLint max_vertices, max_indices, max_patches;
+        glGetIntegerv(GL_MAX_ELEMENTS_VERTICES, &max_vertices);
+        glGetIntegerv(GL_MAX_ELEMENTS_INDICES, &max_indices);
+        glGetIntegerv(GL_MAX_PATCH_VERTICES, &max_patches);
+
+        std::cout << max_vertices << " " << verts.size() << " " << max_indices << " " << indices.size() << " " << "\n";
+
 	}
 
     void draw(glm::mat4 view, glm::mat4 projection, glm::mat4 model, glm::vec3 lightPos, float time) {
@@ -163,23 +187,24 @@ public:
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
         glUniform3fv(lightPosLoc, 1, glm::value_ptr(lightPos));
-
-        // Bind the water texture
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, waterTexture);
-        waterTextureLoc = glGetUniformLocation(this->shaderProgram, "waterTexture");
-        glUniform1i(waterTextureLoc, 0);
-
-        // Bind the displacement texture
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, displacementTexture);
-        displacementTextureLoc = glGetUniformLocation(this->shaderProgram, "disptex");
-        glUniform1i(displacementTextureLoc, 1);
         glUniform1f(timeLoc, time);
 
+        // Bind the water texture
+        glEnable(GL_TEXTURE_2D);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, waterTexture);
+
+        // Bind the displacement texture
+        glEnable(GL_TEXTURE_2D);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, displacementTexture);
+        
+        
+        
         glDrawElements(GL_PATCHES, indices.size(), GL_UNSIGNED_INT, (void*)0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindVertexArray(0);
+        glUseProgram(0);
 }
 
 };
