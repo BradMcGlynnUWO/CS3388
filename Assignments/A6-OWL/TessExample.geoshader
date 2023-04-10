@@ -1,0 +1,31 @@
+#version 400
+
+layout (triangles) in;
+layout (triangle_strip, max_vertices=3) out;
+
+in vec3 color_tes[];
+
+flat out vec3 color_gs;
+out vec3 triDistance;
+
+void main() {
+
+	gl_Position = gl_in[0].gl_Position;
+	color_gs = color_tes[0];
+	triDistance = vec3(1, 0, 0);
+	EmitVertex();
+
+	gl_Position = gl_in[1].gl_Position;
+	color_gs = color_tes[1];
+	triDistance = vec3(0, 1, 0);
+	EmitVertex();
+
+	gl_Position = gl_in[2].gl_Position;
+	color_gs = color_tes[2];
+	triDistance = vec3(0, 0, 1);
+	EmitVertex();
+
+	EndPrimitive();
+
+}
+

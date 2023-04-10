@@ -1,0 +1,25 @@
+#version 400
+
+layout (vertices = 4) out;
+
+in vec3 color_vs[];
+out vec3 color_tcs[];
+
+
+float outerTess = 8;
+float innerTess = 8;
+
+void main() {
+    gl_out[ gl_InvocationID ].gl_Position = gl_in[ gl_InvocationID ].gl_Position;
+
+    color_tcs[gl_InvocationID] = color_vs[gl_InvocationID];
+
+    gl_TessLevelOuter[0] = outerTess;
+    gl_TessLevelOuter[1] = outerTess;
+    gl_TessLevelOuter[2] = outerTess;
+    gl_TessLevelOuter[3] = outerTess;
+    gl_TessLevelInner[0] = innerTess;
+    gl_TessLevelInner[1] = innerTess;
+
+
+}
